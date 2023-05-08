@@ -98,7 +98,7 @@ def train_lgb( X_train, X_test, y_train,y_test,param, grid=None):
         print("grid search ended")
         print("best parameters:", best_parameters)
     else:
-        model = lgb.LGBMRegressor(param, objective ="mse")
+        model = lgb.LGBMRegressor(param)
         model.fit(X_train, y_train)
     pred = pd.DataFrame([model.predict(X_test)]).T
     pred = pred.set_index(y_test.index)
@@ -149,10 +149,10 @@ if __name__ == "__main__":
 
 
     first_preds = train_lgb( X_train, X_test, y_train,y_test, entire_grid, grid=True)
+    first_preds.columns = ["preds"]
     fig = px.line(first_preds, x=first_preds.index, y="preds")
-    fig.add_scatter(x=y_test.index, y=y_test['preds'], mode='lines', name="Prediction (1st Layer)",
-                    text=f"Test results Unit Cost=-73.292", )
-
+    fig.add_scatter(x=y_test.index, y=y_test, mode='lines', name="Ground Truth")
+    fig.add_scatter(x=y_test.index, y=first_preds, mode='lines', name="Prediction (1st Layer)")
     fig.update_layout(title="First Layer Predictons,  and Ground Truth", width=1800, showlegend=True)
     # Show plot 
     fig.update_traces(line={'width': 2})
