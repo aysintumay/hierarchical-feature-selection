@@ -57,6 +57,7 @@ def alpha_calculation(y, y_hat):
     return alpha_df
 
 
+
 def l2loss(y, y_pred, alpha):
 
     alpha= pd.DataFrame(alpha)
