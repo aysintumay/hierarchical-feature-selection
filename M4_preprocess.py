@@ -190,7 +190,7 @@ if __name__ == '__main__':
     plt.plot(np.arange(mape_second_mean_expanding.shape[0]), mape_second_mean_expanding)
     plt.plot(np.arange(mape_ensemble_mean_expanding.shape[0]), mape_ensemble_mean_expanding)
     plt.legend(["y-related Features", "ALl Features Mixed ", "Hierarchical Layer", "Ensemble"])
-    plt.title("Syntethic Dataset Experiment Results")
+    plt.title("M4 Dataset Experiment Results")
     plt.show()
 
 print()

@@ -199,7 +199,7 @@ def creeate_lgb_dataset_v2(phi, theta, d, t,mu,sigma, n, data_path, start, end,l
         data.columns = ["y"]
         data.index = pd.date_range(start=start, end=end,tz = None, freq="1H")[:-1]
 
-    dataset =make_classification(data.shape[0], n_features = n_f, n_informative = n_f, n_redundant=0, weights = [0.9],)
+    dataset =make_classification(data.shape[0], n_features = n_f, n_informative = n_f, n_redundant=0, weights = [0.65],)
     col_names = []
     for i in range(n_f):
         col_names.append("x"+str(i))
@@ -212,7 +212,7 @@ def creeate_lgb_dataset_v2(phi, theta, d, t,mu,sigma, n, data_path, start, end,l
 
     data[dataset_y == 1] = data[dataset_y == 1] * (1+k)
     data[dataset_y == 0] = data[dataset_y == 0] *(1-k)
-    noise = np.random.normal(0, 1.5, data.shape[0])
+    noise = np.random.normal(0, 0.5, data.shape[0])
     data = data.diff(periods = 2).add(noise, axis=0)
     data = data.dropna()
     for lag in lags:
