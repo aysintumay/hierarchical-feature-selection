@@ -22,7 +22,7 @@ from statsmodels.graphics.tsaplots import plot_pacf, plot_acf
 from statsmodels.tsa.stattools import adfuller
 
 from statsmodels.graphics.tsaplots import plot_pacf, plot_acf
-from alpha_optimization import  scaler_F,ordinary_ensembele,train_lgb,l2loss,alpha_calculation
+from alpha_optimization import  scaler_F,ordinary_ensembele,train_lgb,wrapper_based,alpha_calculation
 
 import random
 random.seed(42)
@@ -61,7 +61,7 @@ def add_date_features(df):
     #add date index to the dataframe with the same length as th dataframe and add the following features
     #day of the week, day of the month, month of the year, week of the year, quarter of the year
     #create a date column
-    date = pd.date_range(end='1/1/2023', periods=len(df), freq='D')
+    date = pd.date_range(end='1/1/2023', periods=len(df), freq='H')
     #create a dataframe with the date column
 
     df = pd.DataFrame(df)
@@ -106,7 +106,7 @@ def create_M4(path_train, path_test):
 
     lags  = [2,4,6]
 
-    data = data.diff().dropna()
+    data = data.dropna()
 
     for lag in lags:
         # data["y" + '_lag_' + str(lag)] = data["y"].transform(lambda x: x.shift(lag, fill_value=0))
@@ -135,12 +135,12 @@ def create_M4(path_train, path_test):
 
     #train a SARIMAX model
 
-    predictions, predictions_tra, mape_score_second = train_sarimax(X_train, X_test, y_train, y_test)
-    predictions = pd.DataFrame(predictions)
-    predictions_tra = pd.DataFrame(predictions_tra)
+    # predictions, predictions_tra, mape_score_second = train_sarimax(X_train, X_test, y_train, y_test)
+    # predictions = pd.DataFrame(predictions)
+    # predictions_tra = pd.DataFrame(predictions_tra)
 
-    X_train = pd.concat([X_train, first_preds_tra,predictions_tra], axis=1)
-    X_test = pd.concat([X_test, first_preds,predictions], axis=1)
+    # X_train = pd.concat([X_train, first_preds_tra,predictions_tra], axis=1)
+    # X_test = pd.concat([X_test, first_preds,predictions], axis=1)
 
     y_train = pd.DataFrame(y_train, index = X_train.index, columns=[data.columns[0]])
     y_test = pd.DataFrame(y_test, index = X_test.index, columns=[data.columns[0]])
@@ -180,22 +180,26 @@ def grid_param_create():
 
 
 if __name__ == '__main__':
+    #TODO: Wrapper method will be added.
+    #TODO: Elapsed time will be added.
 
     mape_first = []
     mape_second = []
     mape_ensemble = []
     mape_all = []
-    for i in range(100):
+    non_stationary = []
+    mape_wrapper = []
+    for i in range(10):
         print("======= ITERATION ========", i)
-        data, X_train, X_test, y_train, y_test, X_train2, X_test2 = create_M4("Daily-train.csv",  "Daily-test.csv")
+        data, X_train, X_test, y_train, y_test, X_train2, X_test2 = create_M4("Yearly-train.csv",  "Yearly-test.csv")
         # plot_acf_pacf(data[data.columns[0]])
-        # result = adfuller(data[data.columns[0]])
-        # print('Test Statistic: %f' % result[0])
-        # print('p-value: %f' % result[1])
-        # print('Critical values:')
-        # for key, value in result[4].items():
-        #     print('\t%s: %.3f' % (key, value))
-
+        result = adfuller(data[data.columns[0]])
+        print('Test Statistic: %f' % result[0])
+        print('p-value: %f' % result[1])
+        print('Critical values:')
+        for key, value in result[4].items():
+            print('\t%s: %.3f' % (key, value))
+        non_stationary.append(result[1])
         X_train3 = pd.concat([X_train, X_train2], axis=1)
         X_test3 = pd.concat([X_test, X_test2], axis=1)
 
@@ -206,16 +210,26 @@ if __name__ == '__main__':
         y_train, y_test = scaler_F(y_train, y_test, scaler)
         y_train.columns, y_test.columns = ["y"], ["y"]
 
+        # WRAPPER PREDICTION
+        param = [{'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 5, 'n_estimators': 250,
+                  'num_leaves': 63, 'reg_alpha': 0.1, 'reg_lambda': 1, 'subsample': 0.9, 'subsample_freq': 5}]
+        param = [{k: [v] for k, v in d.items()} for d in param]
+        wrapper_preds, wrapper_preds_tra, mse_score_wrapper = wrapper_based(X_train3, X_test3, y_train, y_test, param,
+                                                                            grid=True)
+        wrapper_preds.columns = ["preds"]
+        mape_wrapper.append(wrapper_preds)
+
         #FIRST PREDICTORS
         param = [{'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 31, 'max_depth': 4, 'n_estimators': 250,
                   'num_leaves': 255, 'reg_alpha': 0.1, 'reg_lambda': 0, 'subsample': 0.6, 'subsample_freq': 1}]
         param = [{k: [v] for k, v in d.items()} for d in param]
         first_preds, first_preds_tra, mape_score_first  = train_lgb(X_train, X_test, y_train,y_test, param, grid=True)
         first_preds.columns = ["preds"]
+
         #ALL PREDICTORS
         mape_first.append(mape_score_first[0])
-        param = [{'colsample_bytree': 0.1, 'learning_rate': 0.1, 'max_bin': 63, 'max_depth': 10, 'n_estimators': 120,
-                 'num_leaves': 63, 'reg_alpha': 0, 'reg_lambda': 0, 'subsample': 0.9, 'subsample_freq': 5}]
+        param = [{'colsample_bytree': 0.1, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 7, 'n_estimators': 120,
+                 'num_leaves': 27, 'reg_alpha': 0, 'reg_lambda': 0, 'subsample': 0.9, 'subsample_freq': 5}]
         param = [{k: [v] for k, v in d.items()} for d in param]
         all_preds, all_preds_tra, mape_score_all = train_lgb(X_train3, X_test3, y_train, y_test, param, grid=True)
         all_preds.columns = ["preds"]
@@ -232,6 +246,7 @@ if __name__ == '__main__':
         yy_train = all_alphas.merge(y_train, left_index=True, right_index=True).iloc[:, 0]
         X_train2 = pd.concat([X_train2, first_preds_tra], axis=1)
         X_test2 = pd.concat([X_test2, first_preds], axis=1)
+
         # ALPHA PREDICTION
         param = [
             {'colsample_bytree': 0.3, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 10, 'n_estimators': 255,
@@ -250,10 +265,9 @@ if __name__ == '__main__':
         if first - mape_score_second > 0:
             print("second layer is better")
         print(" second is: ", mape_score_second, "\n first is: ", first, "\n all is: ", all)
-        param = [
-            {'colsample_bytree': 0.1, 'learning_rate': 0.1, 'max_bin': 31, 'max_depth': 4, 'n_estimators': 125,
-             'num_leaves': 255, 'reg_alpha': 0.1, 'reg_lambda': 0, 'subsample': 0.6, 'subsample_freq': 1}]
-
+        param = [{'colsample_bytree': 0.1, 'learning_rate': 0.001, 'max_bin': 31, 'max_depth': 4, 'n_estimators': 67,
+             'num_leaves': 255, 'reg_alpha': 0, 'reg_lambda': 0, 'subsample': 0.4, 'subsample_freq': 1}]
+        #ENSEMBLE PREDICTORS
         param = [{k: [v] for k, v in d.items()} for d in param]
         second_preds, second_preds_tra, _ = train_lgb(X_train2, X_test2, y_train, y_test, param, grid=True)
         ensemble_train, ensemble_val, ensemble_test, mape_score_ensemble = ordinary_ensembele(first_preds,
@@ -262,6 +276,8 @@ if __name__ == '__main__':
                                                                                               second_preds_tra,
                                                                                               y_train, y_test)
         mape_ensemble.append(mape_score_ensemble[0])
+    mean_non_stationarity = np.mean(non_stationary)
+    print("Mean p-value is:", mean_non_stationarity)
     mape_first_mean = pd.DataFrame([np.mean(mape_first, axis=0)][0])
 
     mape_all_mean = pd.DataFrame([np.mean(mape_all, axis=0)][0])
@@ -279,12 +295,13 @@ if __name__ == '__main__':
     plt.plot(np.arange(mape_ensemble_mean_expanding.shape[0]), mape_ensemble_mean_expanding, "-.", color="blue")
     plt.legend(["y-related Features", "All Features", "Hierarchical", "Ensemble"])
     plt.title("M4 Dataset Experiment Results")
-    plt.ylabel("Mean Square Error")
+    plt.ylabel("Mean Squared Error")
     plt.xlabel("Data Points")
     plt.grid("on")
     plt.show()
     plt.savefig("M4_Dataset_Experiment_Results.png")
     plt.close()
+
     plt.plot(np.arange(len(all_alphas)), np.array(all_alphas))
     plt.plot(np.arange(len(all_alphas)), np.concatenate([alpha_preds_tr, alpha_preds], axis=0))
     plt.legend(["Ground Truth", "Alpha Prediction"])
@@ -295,6 +312,7 @@ if __name__ == '__main__':
     plt.show()
     plt.savefig("M4_Dataset_ALPHA.png")
     plt.close()
+
     plt.plot(y_test.index, y_test)
     plt.plot(y_test.index, y_new_test.reshape(-1,1))
     plt.plot(y_test.index, first_preds)
@@ -306,7 +324,6 @@ if __name__ == '__main__':
     plt.xlabel("Date")
     plt.grid("on")
     plt.savefig("M4_all_predictions.png")
-
     plt.show()
 print()
 

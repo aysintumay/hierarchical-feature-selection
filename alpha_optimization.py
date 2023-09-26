@@ -71,20 +71,20 @@ def l2loss(y, y_pred, alpha):
 
 def train_lgb( X_t, X_te, y_t,y_te,param, grid=None):
     if grid:
-        print("grid search started")
+        #print("grid search started")
         START = time.time()
         model = lgb.LGBMRegressor(objective ="mse")
         grid = GridSearchCV(estimator=model, param_grid=param,
                             cv=5, verbose=-1, refit=True)
         grid.fit(X_t, y_t)
         END = time.time()
-        print(END - START)
+        #print(END - START)
         best_parameters = grid.best_params_
         model = grid.best_estimator_
         best_score = grid.best_score_
-        print("Val MAE:",best_score)
-        print("grid search ended")
-        print("best parameters:", best_parameters)
+        #print("Val MAE:",best_score)
+        #print("grid search ended")
+        #print("best parameters:", best_parameters)
     else:
         model = lgb.LGBMRegressor(*param)
         model.fit(X_t, y_t)
@@ -98,8 +98,8 @@ def train_lgb( X_t, X_te, y_t,y_te,param, grid=None):
     mape_score = mape(y_te,pred)
     mape_score_tr = mape(y_t,pred_tr)
 
-    print("\t Test MAPE:",mape_score)
-    print("Train MAPE:",mape_score_tr)
+    #print("\t Test MAPE:",mape_score)
+    #print("Train MAPE:",mape_score_tr)
     mse_pointwise = [((y_te.values - pred.values) ** 2)]
     # feature_scores = pd.Series(model.feature_importances_, index=X_t.columns).sort_values(ascending=False)
     # f, ax = plt.subplots(figsize=(20, 10))
@@ -111,7 +111,47 @@ def train_lgb( X_t, X_te, y_t,y_te,param, grid=None):
     #
     # plt.show()
     return pred, pred_tr, mse_pointwise
+def wrapper_based(X_train_init, X_test_init, y_train_init, y_test_init, param, grid = None):
+    X_train = X_train_init.copy()
+    START = time.time()
+    for iter in range(X_train.shape[1]-8):
+        # calculate initial performance
+        init_preds, init_preds_tra, mse_score_init = train_lgb(X_train_init, X_test_init, y_train_init, y_test_init, param, grid=True)
+        init_preds.columns = ["preds"]
+        current_features = X_train_init.columns
+        mape_score_init = mape(y_test_init, init_preds)
+
+        for feat in X_train_init.columns:
+
+            df_new_tr = X_train_init.drop(columns = feat, axis = 1)
+            df_new_test = X_test_init.drop(columns = feat, axis = 1)
+
+            #train lgb
+            curr_preds, curr_preds_tra, curr_mse = train_lgb(df_new_tr, df_new_test, y_train_init,
+                                                                    y_test_init, param, grid=True)
+            curr_preds.columns = ["preds"]
+            curr_mape = mape(y_test_init, curr_preds)
+
+            if curr_mape <= mape_score_init:
+                mape_score_init = curr_mape
+            else:
+                # Revert to the previous set of features if performance drops
+                X_train_init = X_train_init[current_features]
+                X_test_init = X_test_init[current_features]
+    last_preds, init_preds_tra, mape_score_last = train_lgb(X_train_init, X_test_init, y_train_init, y_test_init, param,    grid=True)
+
+    last_preds.columns = ["preds"]
+    final_mape = mape(y_test_init, last_preds)
+
+    mse_pointwise = [((y_test_init.values - last_preds.values) ** 2)]
+    print("WRAPPER METHOD:" ,"\n", "mape:", final_mape)
+    END = time.time()
+    print("\n", "elapsed time:" ,END - START)
+
+    return X_train_init, X_test_init,mse_pointwise
+
 def ordinary_ensembele(first_p, first_p_tr, second_p, second_p_tr, y_train, y_test):
+    START = time.time()
 
     first_p_val = first_p_tr
     first_p_tr = first_p_tr.iloc[:int(len(first_p_tr)*0.8)]
@@ -127,7 +167,7 @@ def ordinary_ensembele(first_p, first_p_tr, second_p, second_p_tr, y_train, y_te
     second_p_val.columns, second_p_tr.columns, y_val.columns, y_train.columns = ["y"], ["y"], ["y"], ["y"]
     alphas = np.linspace(0, 1, num=30)
     best_alpha = 0
-    best_mape = 0
+    best_mape = np.inf
     for a in alphas:
         all_pr_val = a * first_p_val + (1-a) * second_p_val
         mape_score_val = mape(y_val, all_pr_val)
@@ -140,10 +180,15 @@ def ordinary_ensembele(first_p, first_p_tr, second_p, second_p_tr, y_train, y_te
     mape_score = mape(y_test, all_pr_test)
     mape_score_tr = mape(y_train, all_pr_tr)
     mse_pointwise = [((y_test.values - all_pr_test.values) ** 2)]
+    END = time.time()
+
     print("CHOSEN ALPHA IS ", best_alpha)
     print("\t Test MAPE:", mape_score)
     print("\t Train MAPE:", mape_score_tr)
     print("\t Validation MAPE:", best_mape)
+    print("ENSEMBLE METHOD:","mape:", mape_score)
+    print("\n", "elapsed time:" ,END - START)
+
     return all_pr_tr,all_pr_val, all_pr_test,mse_pointwise
 def scaler_F(train1, test1, scaler):
     scaler = scaler.fit(train1)
@@ -186,11 +231,13 @@ if __name__ == "__main__":
     mape_second = []
     mape_ensemble = []
     mape_all = []
-    for i in range(200):
+    mape_wrapper = []
+    non_stationarity = []
+    for i in range(50):
         print("======= ITERATION ========", i)
         dataset1, X_train, X_test, y_train, y_test, X_train2, X_test2 = creeate_lgb_dataset_v2(phi, theta, d, t,mu,sigma, n,
-                        "tsgen-2023-05-03 10_59_32.csv",start_date, end_date, [2, 4, 6, 8], 26, 0.33, autogenerated = True, MA = False)
-        plot_acf_pacf(dataset1['y'])
+                        "tsgen-2023-05-03 10_59_32.csv",start_date, end_date, [1,2,3,4,7], 26, 0.33, autogenerated = True, MA = False)
+    # plot_acf_pacf(dataset1['y'])
         result = adfuller(dataset1['y'])
         print('Test Statistic: %f' % result[0])
         print('p-value: %f' % result[1])
@@ -200,6 +247,8 @@ if __name__ == "__main__":
         # GR = None
         # with open("lgb_grid_0.pkl", 'rb') as f:
         #     GR = pickle.load(f)
+
+        non_stationarity.append(result[1])
         #concatenate X_train and X_train2, X_test and X_test2
         X_train3 = pd.concat([X_train, X_train2], axis=1)
         X_test3 = pd.concat([X_test, X_test2], axis=1)
@@ -210,6 +259,14 @@ if __name__ == "__main__":
         X_train3, X_test3 = scaler_F(X_train3, X_test3, scaler)
         y_train, y_test = scaler_F(y_train, y_test, scaler)
         y_train.columns, y_test.columns = ["y"], ["y"]
+
+        #WRAPPER PREDICTION
+        param = [{'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 5, 'n_estimators': 250,
+                  'num_leaves': 63, 'reg_alpha': 0.1, 'reg_lambda': 1, 'subsample': 0.9, 'subsample_freq': 5}]
+        param = [{k: [v] for k, v in d.items()} for d in param]
+        wrapper_preds, wrapper_preds_tra, mse_score_wrapper = wrapper_based(X_train3, X_test3, y_train, y_test, param, grid=True)
+        wrapper_preds.columns = ["preds"]
+        mape_wrapper.append(wrapper_preds)
 
         #Y-RELATED PREDICTION
         param = [{'colsample_bytree': 1, 'learning_rate': 0.01, 'max_bin': 15, 'max_depth': 7, 'n_estimators': 200,
@@ -225,8 +282,10 @@ if __name__ == "__main__":
         param = [{k: [v] for k, v in d.items()} for d in param]
         all_preds, all_preds_tra, mape_score_all = train_lgb(X_train3, X_test3, y_train, y_test, param, grid=True)
         all_preds.columns = ["preds"]
-
         mape_all.append(mape_score_all[0])
+
+        START = time.time()
+
         y = pd.concat([y_train, y_test], axis=0)
         y_hat = pd.concat([first_preds_tra, first_preds], axis=0)
         all_alphas = alpha_calculation(y, y_hat)
@@ -253,6 +312,10 @@ if __name__ == "__main__":
         all = mape(y_test,  all_preds)
         mse_pointwise = [((y_test.values - y_new_test) ** 2)]
         mape_second.append(mse_pointwise[0])
+        END = time.time()
+        print("HIERARCHICAL METHOD:", "mape:", mape_score_second)
+        print("\n", "elapsed time:", END - START)
+
         if first -mape_score_second>0:
             print("second layer is better")
 
@@ -267,24 +330,32 @@ if __name__ == "__main__":
         ensemble_train, ensemble_val, ensemble_test, mape_score_ensemble = ordinary_ensembele(first_preds, first_preds_tra, second_preds,
                                                                          second_preds_tra, y_train, y_test)
         mape_ensemble.append(mape_score_ensemble[0])
+    mean_non_stationarity = np.mean(non_stationarity)
+    print("Mean p-value is:", mean_non_stationarity)
     mape_first_mean = pd.DataFrame([np.mean(mape_first, axis = 0)][0])
-
     mape_all_mean = pd.DataFrame([np.mean(mape_all, axis = 0)][0])
-
     mape_second_mean = pd.DataFrame([np.mean(mape_second, axis = 0)][0])
     mape_ensemble_mean = pd.DataFrame([np.mean(mape_ensemble, axis = 0)][0])
+    mape_wrapper_mean = pd.DataFrame([np.mean(mape_wrapper, axis = 0)][0])
+
+
     mape_first_mean_expanding = mape_first_mean.expanding().mean()
     mape_all_mean_expanding = mape_all_mean.expanding().mean()
     mape_second_mean_expanding = mape_second_mean.expanding().mean()
     mape_ensemble_mean_expanding = mape_ensemble_mean.expanding().mean()
-    plot_indexes = y_test.index[17:]
-    plt.plot(plot_indexes, (mape_first_mean_expanding[17:]) ,"--", color="red")
-    plt.plot(plot_indexes, (mape_all_mean_expanding[17:]), "--", color="green")
-    plt.plot(plot_indexes, (mape_second_mean_expanding[17:]), color="black")
-    plt.plot(plot_indexes, (mape_ensemble_mean_expanding[17:]), "-.", color="blue")
-    plt.legend(["y-related Features", "All Features", "Hierarchical", "Ensemble"])
+    mape_wrapper_mean_expanding = mape_wrapper_mean.expanding().mean()
+
+
+    plot_indexes = y_test.index[:]
+    plt.plot(plot_indexes, (mape_first_mean_expanding[:]) ,"--", color="red")
+    plt.plot(plot_indexes, (mape_all_mean_expanding[:]), "--", color="green")
+    plt.plot(plot_indexes, (mape_second_mean_expanding[:]), color="black")
+    plt.plot(plot_indexes, (mape_ensemble_mean_expanding[:]), "-.", color="blue")
+    plt.plot(plot_indexes, (mape_wrapper_mean_expanding[:]), "-.", color="blue")
+
+    plt.legend(["y-related Features", "All Features", "Hierarchical", "Ensemble", "Wrapper"])
     plt.title("Syntethic Dataset Experiment Results")
-    plt.ylabel("Mean Absolute Percentage Error")
+    plt.ylabel("Mean Square Error")
     plt.xlabel("Data Points")
     plt.grid("on")
     plt.savefig("syntethic_dataset_experiment_results.png")
@@ -298,6 +369,7 @@ if __name__ == "__main__":
     plt.plot(y_test.index, y_test)
     plt.plot(y_test.index, y_new_test)
     plt.plot(y_test.index, first_preds)
+
     #plt.plot(y_test.index, all_preds)
     plt.legend(["Ground Truth", "Second Layer Prediction", "First Layer Prediction",])
     plt.show()
