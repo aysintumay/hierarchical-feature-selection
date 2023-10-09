@@ -227,9 +227,9 @@ def creeate_lgb_dataset_v2(phi, theta, d, t,mu,sigma, n, data_path, start, end,l
     data_all = dataset_x.merge(data, left_index =True, right_index = True)
     plt.figure(figsize=(15, 15))
     corrmat = data_all.corr()
-    hm = sns.heatmap(corrmat, cbar=True, annot=True, square=True, fmt=".2f", annot_kws={"size": 7}, cmap="Spectral_r")
-    plt.title("Correlation Matrix")
-    plt.show()
+    # hm = sns.heatmap(corrmat, cbar=True, annot=True, square=True, fmt=".2f", annot_kws={"size": 7}, cmap="Spectral_r")
+    # plt.title("Correlation Matrix")
+    # plt.show()
     second_set = data_all.iloc[:,:n_f]
     first_set = data_all.iloc[:,n_f:]
     X_train, X_test, y_train, y_test = train_test_split(first_set.iloc[:,1:], first_set.iloc[:, 0], test_size=val_ratio,
