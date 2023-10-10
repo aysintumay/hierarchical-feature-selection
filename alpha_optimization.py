@@ -111,44 +111,59 @@ def train_lgb( X_t, X_te, y_t,y_te,param, grid=None):
     #
     # plt.show()
     return pred, pred_tr, mse_pointwise
-def wrapper_based(X_train_init, X_test_init, y_train_init, y_test_init, param, grid = None):
-    X_train = X_train_init.copy()
+def wrapper_based(X_train, X_test, y_train, y_test, param, grid = None):
+
+    X_train_init = X_train.copy()
     START = time.time()
-    for iter in range(X_train.shape[1]-8):
+    X_train_init, X_val, y_train_init, y_val_init = train_test_split(X_train_init, y_train, test_size=0.33,random_state=42)
+    X_val_init = X_val.copy()
+    for iter in range(X_train.shape[1]-15):
         # calculate initial performance
-        init_preds, init_preds_tra, mse_score_init = train_lgb(X_train_init, X_test_init, y_train_init, y_test_init, param, grid=True)
+        init_preds, init_preds_tra, mse_score_init = train_lgb(X_train_init, X_val_init, y_train_init, y_val_init, param, grid=True)
         init_preds.columns = ["preds"]
         current_features = X_train_init.columns
-        mape_score_init = mape(y_test_init, init_preds)
-
-        for feat in X_train_init.columns:
+        mape_score = mape(y_val_init, init_preds)
+        X_train_init_2 = X_train_init.copy()
+        min_reduction = np.inf
+        for feat in current_features:
 
             df_new_tr = X_train_init.drop(columns = feat, axis = 1)
-            df_new_test = X_test_init.drop(columns = feat, axis = 1)
-
+            df_new_test = X_val_init.drop(columns = feat, axis = 1)
             #train lgb
             curr_preds, curr_preds_tra, curr_mse = train_lgb(df_new_tr, df_new_test, y_train_init,
-                                                                    y_test_init, param, grid=True)
-            curr_preds.columns = ["preds"]
-            curr_mape = mape(y_test_init, curr_preds)
-
-            if curr_mape <= mape_score_init:
-                mape_score_init = curr_mape
+                                                                    y_val_init, param, grid=True)
+            #current_features.columns = ["preds"]
+            curr_mape = mape(y_val_init, curr_preds)
+            reduction = mape_score - curr_mape
+            if reduction <= min_reduction:
+                min_reduction = reduction
+                X_train_temp = df_new_tr
+                X_val_temp = df_new_test
             else:
                 # Revert to the previous set of features if performance drops
-                X_train_init = X_train_init[current_features]
-                X_test_init = X_test_init[current_features]
-    last_preds, init_preds_tra, mape_score_last = train_lgb(X_train_init, X_test_init, y_train_init, y_test_init, param,    grid=True)
+                X_train_init = X_train_init_2[current_features]
+                X_val_init = X_val[current_features]
+        X_train_init = X_train_temp
+        X_val_init = X_val_temp
+    #last_preds_val, init_preds_tra, mape_score_last_val = train_lgb(X_train_init, X_val_init, y_train, y_val_init, param,    grid=True)
+    # init_preds_tra.columns = ["preds"]
+    # last_preds_val.columns = ["preds"]
+    # final_mape_val = mape(y_val_init, last_preds_val)
+    # X_test = X_test[X_train_init.columns]
+    # mse_pointwise_val = [((y_val_init.values - last_preds_val.values) ** 2)]
+    X_train= X_train[X_train_init.columns]
+    X_test = X_test[X_train_init.columns]
 
-    last_preds.columns = ["preds"]
-    final_mape = mape(y_test_init, last_preds)
-
-    mse_pointwise = [((y_test_init.values - last_preds.values) ** 2)]
+    last_preds_test, last_preds_tra, mape_last_test = train_lgb(X_train, X_test, y_train, y_test, param,    grid=True)
+    last_preds_test.columns, last_preds_tra.columns = ["preds"],["preds"]
+    final_mape = mape(y_test, last_preds_test)
+    mse_pointwise_test = [((y_test.values - last_preds_test.values) ** 2)]
     print("WRAPPER METHOD:" ,"\n", "mape:", final_mape)
     END = time.time()
+    timee = END - START
     print("\n", "elapsed time:" ,END - START)
 
-    return X_train_init, X_test_init,mse_pointwise
+    return last_preds_test, last_preds_tra, X_train, X_test,mse_pointwise_test, timee
 
 def ordinary_ensembele(first_p, first_p_tr, second_p, second_p_tr, y_train, y_test):
     START = time.time()
@@ -187,9 +202,10 @@ def ordinary_ensembele(first_p, first_p_tr, second_p, second_p_tr, y_train, y_te
     print("\t Train MAPE:", mape_score_tr)
     print("\t Validation MAPE:", best_mape)
     print("ENSEMBLE METHOD:","mape:", mape_score)
+    timee = END - START
     print("\n", "elapsed time:" ,END - START)
 
-    return all_pr_tr,all_pr_val, all_pr_test,mse_pointwise
+    return all_pr_tr,all_pr_val, all_pr_test,mse_pointwise,timee
 def scaler_F(train1, test1, scaler):
     scaler = scaler.fit(train1)
     sc_train = scaler.transform(train1)
@@ -233,7 +249,9 @@ if __name__ == "__main__":
     mape_all = []
     mape_wrapper = []
     non_stationarity = []
-    for i in range(50):
+    time_wrapper, time_ensemble, time_all, time_y, time_hierarchical = 0,0,0,0,0
+    iter = 200
+    for i in range(iter):
         print("======= ITERATION ========", i)
         dataset1, X_train, X_test, y_train, y_test, X_train2, X_test2 = creeate_lgb_dataset_v2(phi, theta, d, t,mu,sigma, n,
                         "tsgen-2023-05-03 10_59_32.csv",start_date, end_date, [1,2,3,4,7], 26, 0.33, autogenerated = True, MA = False)
@@ -264,15 +282,19 @@ if __name__ == "__main__":
         param = [{'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 5, 'n_estimators': 250,
                   'num_leaves': 63, 'reg_alpha': 0.1, 'reg_lambda': 1, 'subsample': 0.9, 'subsample_freq': 5}]
         param = [{k: [v] for k, v in d.items()} for d in param]
-        wrapper_preds, wrapper_preds_tra, mse_score_wrapper = wrapper_based(X_train3, X_test3, y_train, y_test, param, grid=True)
+        wrapper_preds, wrapper_preds_tra, X_wrapper_tra, X_wrapper_test, mse_score_wrapper, time_w = wrapper_based(X_train3, X_test3, y_train, y_test, param, grid=True)
         wrapper_preds.columns = ["preds"]
-        mape_wrapper.append(wrapper_preds)
+        mape_wrapper.append(mse_score_wrapper[0])
+        time_wrapper += time_w
 
         #Y-RELATED PREDICTION
         param = [{'colsample_bytree': 1, 'learning_rate': 0.01, 'max_bin': 15, 'max_depth': 7, 'n_estimators': 200,
         'num_leaves': 255, 'reg_alpha': 0.1, 'reg_lambda': 1, 'subsample': 0.9, 'subsample_freq': 1}]
         param = [{k: [v] for k, v in d.items()} for d in param]
+        START = time.time()
         first_preds, first_preds_tra, mape_score_first  = train_lgb( X_train, X_test, y_train,y_test, param, grid=True)
+        END = time.time()
+        time_y += END-START
         first_preds.columns = ["preds"]
         mape_first.append(mape_score_first[0])
 
@@ -280,12 +302,14 @@ if __name__ == "__main__":
         param = [{'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 5, 'n_estimators': 250,
                  'num_leaves': 63, 'reg_alpha': 0.1, 'reg_lambda': 1, 'subsample': 0.9, 'subsample_freq': 5}]
         param = [{k: [v] for k, v in d.items()} for d in param]
+        START = time.time()
         all_preds, all_preds_tra, mape_score_all = train_lgb(X_train3, X_test3, y_train, y_test, param, grid=True)
+        END = time.time()
         all_preds.columns = ["preds"]
         mape_all.append(mape_score_all[0])
+        time_all += END-START
 
         START = time.time()
-
         y = pd.concat([y_train, y_test], axis=0)
         y_hat = pd.concat([first_preds_tra, first_preds], axis=0)
         all_alphas = alpha_calculation(y, y_hat)
@@ -307,12 +331,13 @@ if __name__ == "__main__":
         #2ND LAYER PREDICTON
         y_new_test = (1 + alpha_preds.values) * (first_preds.values)
         y_new_train = (1 + alpha_preds_tr.values) * (first_preds_tra.values)
+        END = time.time()
+        time_hierarchical += END - START
         mape_score_second = mape(y_test, y_new_test)
         first = mape(y_test, first_preds)
         all = mape(y_test,  all_preds)
         mse_pointwise = [((y_test.values - y_new_test) ** 2)]
         mape_second.append(mse_pointwise[0])
-        END = time.time()
         print("HIERARCHICAL METHOD:", "mape:", mape_score_second)
         print("\n", "elapsed time:", END - START)
 
@@ -327,11 +352,13 @@ if __name__ == "__main__":
 
         param = [{k: [v] for k, v in d.items()} for d in param]
         second_preds, second_preds_tra, _ = train_lgb(X_train2, X_test2, y_train, y_test, param, grid=True)
-        ensemble_train, ensemble_val, ensemble_test, mape_score_ensemble = ordinary_ensembele(first_preds, first_preds_tra, second_preds,
+        ensemble_train, ensemble_val, ensemble_test, mape_score_ensemble, time_ens = ordinary_ensembele(first_preds, first_preds_tra, second_preds,
                                                                          second_preds_tra, y_train, y_test)
+        time_ensemble += time_ens
         mape_ensemble.append(mape_score_ensemble[0])
     mean_non_stationarity = np.mean(non_stationarity)
     print("Mean p-value is:", mean_non_stationarity)
+
     mape_first_mean = pd.DataFrame([np.mean(mape_first, axis = 0)][0])
     mape_all_mean = pd.DataFrame([np.mean(mape_all, axis = 0)][0])
     mape_second_mean = pd.DataFrame([np.mean(mape_second, axis = 0)][0])
@@ -347,19 +374,26 @@ if __name__ == "__main__":
 
 
     plot_indexes = y_test.index[:]
+    plt.subplots(figsize=(12, 9))
     plt.plot(plot_indexes, (mape_first_mean_expanding[:]) ,"--", color="red")
     plt.plot(plot_indexes, (mape_all_mean_expanding[:]), "--", color="green")
     plt.plot(plot_indexes, (mape_second_mean_expanding[:]), color="black")
     plt.plot(plot_indexes, (mape_ensemble_mean_expanding[:]), "-.", color="blue")
-    plt.plot(plot_indexes, (mape_wrapper_mean_expanding[:]), "-.", color="blue")
+    plt.plot(plot_indexes, (mape_wrapper_mean_expanding[:]), "-.", color="purple")
 
-    plt.legend(["y-related Features", "All Features", "Hierarchical", "Ensemble", "Wrapper"])
+    plt.legend(["Embedded", "Baseline LightGBM", "Hierarchical Ensemble", "Ensemble", "Wrapper"])
     plt.title("Syntethic Dataset Experiment Results")
     plt.ylabel("Mean Square Error")
     plt.xlabel("Data Points")
     plt.grid("on")
+    plt.xticks(rotation=45)
     plt.savefig("syntethic_dataset_experiment_results.png")
     plt.show()
+    print('wrapper',time_wrapper/iter, '\n', "y_related", time_y/iter, '\n', "all",time_all/iter, '\n', "ensemble",
+                time_ensemble/iter, '\n', "hierarchical", time_hierarchical/iter)
+    # with open('elapsed_time_sentetik.txt', 'w') as f:
+    #     f.write('wrapper',time_wrapper/iter, '\n', "y_related", time_y/iter, '\n', "all",time_all/iter, '\n', "ensemble",
+    #             time_ensemble/iter, '\n', "hierarchical", time_hierarchical/iter)
 
     # plt.plot(np.arange(len(all_alphas)), all_alphas)
     # plt.plot(np.arange(len(all_alphas)), np.concatenate([alpha_preds_tr, alpha_preds], axis=0))
@@ -425,3 +459,4 @@ if __name__ == "__main__":
     # plot(fig)
 
 print()
+
