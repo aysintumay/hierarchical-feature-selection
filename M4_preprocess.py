@@ -137,15 +137,15 @@ def create_M4(path_train, path_test):
 
     #train a SARIMAX model
 
-    predictions, predictions_tra, mape_score_second = train_sarimax(X_train, X_test, y_train, y_test)
-    predictions = pd.DataFrame(predictions)
-    predictions_tra = pd.DataFrame(predictions_tra)
+    # predictions, predictions_tra, mape_score_second = train_sarimax(X_train, X_test, y_train, y_test)
+    # predictions = pd.DataFrame(predictions)
+    # predictions_tra = pd.DataFrame(predictions_tra)
 
 
     # X_train = pd.concat([X_train, first_preds_tra], axis=1)
     # X_test = pd.concat([X_test, first_preds], axis=1)
-    X_train = pd.concat([X_train, predictions_tra], axis=1)
-    X_test = pd.concat([X_test, predictions], axis=1)
+    # X_train = pd.concat([X_train, predictions_tra], axis=1)
+    # X_test = pd.concat([X_test, predictions], axis=1)
     # X_train = pd.concat([X_train, first_preds_tra,predictions_tra], axis=1)
     # X_test = pd.concat([X_test, first_preds,predictions], axis=1)
     y_train = pd.DataFrame(y_train, index = X_train.index, columns=[data.columns[0]])
@@ -194,7 +194,7 @@ if __name__ == '__main__':
     mape_wrapper = []
     non_stationarity = []
     time_wrapper, time_ensemble, time_all, time_y, time_hierarchical = 0, 0, 0, 0, 0
-    iter = 10
+    iter = 200
     for i in range(iter):
         print("======= ITERATION ========", i)
         data, X_train, X_test, y_train, y_test, X_train2, X_test2 = create_M4("Hourly-train.csv",  "Hourly-test.csv")
@@ -320,7 +320,7 @@ if __name__ == '__main__':
     plt.xlabel("Data Points")
     plt.grid("on")
     plt.xticks(rotation=45)
-    #plt.savefig("M4_Dataset_Experiment_Results.png")
+    plt.savefig("M4_Dataset_Experiment_Results.png")
     plt.show()
     print('wrapper', time_wrapper / iter, '\n', "y_related", time_y / iter, '\n', "all", time_all / iter, '\n',
           "ensemble",
