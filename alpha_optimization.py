@@ -24,8 +24,9 @@ warnings.filterwarnings("ignore")
 np.random.seed(42)
 def alpha_calculation(y, y_hat):
     loss_Arr = []
-    alpha_range_pos = np.linspace(0, 0.33, num=30)
-    alpha_range_neg = np.linspace(-0.33, 0, num=30)
+    # alpha_range_pos = np.linspace(0, 0.33, num=30)
+    # alpha_range_neg = np.linspace(-0.33, 0, num=30)
+    alpha_range = np.linspace(-0.33, 0.33, num=60)
 
     alpha_Arr = []
     for j in tqdm.tqdm(y.index):
@@ -33,12 +34,13 @@ def alpha_calculation(y, y_hat):
         y_temp.index = [str(j)]
         y_temp_hat = pd.DataFrame([y_hat["y"].loc[j]])
         y_temp_hat.index = [str(j)]
-        if y_temp.values < y_temp_hat.values:
-            alpha_range = alpha_range_neg
-            temp_alfa = alpha_range[0]
-        else:
-            alpha_range = alpha_range_pos
-            temp_alfa = alpha_range[0]
+        # if y_temp.values < y_temp_hat.values:
+        #     alpha_range = alpha_range_neg
+        #     temp_alfa = alpha_range[0]
+        # else:
+        #     alpha_range = alpha_range_pos
+        #     temp_alfa = alpha_range[0]
+        temp_alfa = alpha_range[0]
         temp_loss = l2loss(y_temp, y_temp_hat, [temp_alfa])
         for i in range(len(alpha_range)):
 
@@ -117,7 +119,7 @@ def wrapper_based(X_train, X_test, y_train, y_test, param, grid = None):
     START = time.time()
     X_train_init, X_val, y_train_init, y_val_init = train_test_split(X_train_init, y_train, test_size=0.33,random_state=42)
     X_val_init = X_val.copy()
-    for iter in range(X_train.shape[1]-15):
+    for iter in np.arange(3,X_train.shape[1]-15):
         # calculate initial performance
         init_preds, init_preds_tra, mse_score_init = train_lgb(X_train_init, X_val_init, y_train_init, y_val_init, param, grid=True)
         init_preds.columns = ["preds"]
@@ -145,6 +147,7 @@ def wrapper_based(X_train, X_test, y_train, y_test, param, grid = None):
                 X_val_init = X_val[current_features]
         X_train_init = X_train_temp
         X_val_init = X_val_temp
+        print(iter,"finished")
     #last_preds_val, init_preds_tra, mape_score_last_val = train_lgb(X_train_init, X_val_init, y_train, y_val_init, param,    grid=True)
     # init_preds_tra.columns = ["preds"]
     # last_preds_val.columns = ["preds"]
@@ -374,20 +377,21 @@ if __name__ == "__main__":
 
 
     plot_indexes = y_test.index[:]
-    plt.subplots(figsize=(12, 9))
-    plt.plot(plot_indexes, (mape_first_mean_expanding[:]) ,"--", color="red")
-    plt.plot(plot_indexes, (mape_all_mean_expanding[:]), "--", color="green")
-    plt.plot(plot_indexes, (mape_second_mean_expanding[:]), color="black")
-    plt.plot(plot_indexes, (mape_ensemble_mean_expanding[:]), "-.", color="blue")
-    plt.plot(plot_indexes, (mape_wrapper_mean_expanding[:]), "-.", color="purple")
-
-    plt.legend(["Embedded", "Baseline LightGBM", "Hierarchical Ensemble", "Ensemble", "Wrapper"])
-    plt.title("Syntethic Dataset Experiment Results")
-    plt.ylabel("Mean Square Error")
-    plt.xlabel("Data Points")
+    plt.subplots(figsize=(12, 12))
+    plt.plot(plot_indexes, (mape_first_mean_expanding[:]), "--", color="red" ,linewidth=2.25)
+    plt.plot(plot_indexes, (mape_all_mean_expanding[:]), "--", color="green",linewidth=2.25)
+    plt.plot(plot_indexes, (mape_second_mean_expanding[:]), color="black",linewidth=2.25)
+    plt.plot(plot_indexes, (mape_ensemble_mean_expanding[:]), "-.", color="blue",linewidth=2.25)
+    plt.plot(plot_indexes, (mape_wrapper_mean_expanding[:]), "-.", color="purple",linewidth=2.25)
+    plt.legend(["Embedded", "Baseline LightGBM", "Hierarchical Ensemble", "Ensemble", "Wrapper"], fontsize=18)
+    plt.title("Synthetic Dataset Experiment Results", fontsize=20)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.ylabel("Mean Square Error", fontsize=18)
+    plt.xlabel("Data Points", fontsize=18)
     plt.grid("on")
     plt.xticks(rotation=45)
-    plt.savefig("syntethic_dataset_experiment_results.png")
+    plt.savefig("syntethic_dataset_experiment_results.pdf",dpi = 300)
     plt.show()
     print('wrapper',time_wrapper/iter, '\n', "y_related", time_y/iter, '\n', "all",time_all/iter, '\n', "ensemble",
                 time_ensemble/iter, '\n', "hierarchical", time_hierarchical/iter)

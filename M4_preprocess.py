@@ -27,6 +27,8 @@ from alpha_optimization import  scaler_F,ordinary_ensembele,train_lgb,wrapper_ba
 
 import random
 random.seed(42)
+import warnings
+warnings.filterwarnings("ignore")
 def plot_acf_pacf(series):
     plt.subplots(figsize=(10, 10))
     plot_pacf(series, lags=20)
@@ -62,7 +64,7 @@ def add_date_features(df):
     #add date index to the dataframe with the same length as th dataframe and add the following features
     #day of the week, day of the month, month of the year, week of the year, quarter of the year
     #create a date column
-    date = pd.date_range(end='1/1/2023', periods=len(df), freq='D')
+    date = pd.date_range(end='1/1/2023', periods=len(df), freq='H')
     #create a dataframe with the date column
 
     df = pd.DataFrame(df)
@@ -70,7 +72,7 @@ def add_date_features(df):
     df['day_of_month'] = pd.DatetimeIndex(date).day
     df['week_of_year'] = pd.DatetimeIndex(date).weekofyear
     df['quarter_of_year'] = pd.DatetimeIndex(date).quarter
-    df['hour_of_day'] = pd.DatetimeIndex(date).hour
+    #df['hour_of_day'] = pd.DatetimeIndex(date).hour
     def sc_transform(c):
         max_val = c.max()
         sin_values = [math.sin((2 * math.pi * x) / max_val) for x in list(c)]
@@ -86,7 +88,7 @@ def add_date_features(df):
     df["week_of_the_year_sin"], df["week_of_the_year_cos"] = sc_transform(pd.DatetimeIndex(date).isocalendar().week -1)
 
     df["season_of_the_year_sin"], df["season_of_the_year_cos"] = sc_transform(pd.DatetimeIndex(date).month % 12 // 3)
-    df["hour_of_the_day_sin"], df["hour_of_the_day_cos"] = sc_transform(pd.DatetimeIndex(date).hour)
+    #df["hour_of_the_day_sin"], df["hour_of_the_day_cos"] = sc_transform(pd.DatetimeIndex(date).hour)
 
     df.index= pd.DatetimeIndex(date)
     #drop the first and second columns
@@ -217,8 +219,14 @@ if __name__ == '__main__':
         y_train.columns, y_test.columns = ["y"], ["y"]
 
         # WRAPPER PREDICTION
-        param = [{'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 5, 'n_estimators': 250,
-                  'num_leaves': 63, 'reg_alpha': 0.1, 'reg_lambda': 1, 'subsample': 0.9, 'subsample_freq': 5}]
+        # param = [{'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 5, 'n_estimators': 250,
+        #           'num_leaves': 63, 'reg_alpha': 0.1, 'reg_lambda': 1, 'subsample': 0.9, 'subsample_freq': 5}]
+        param = [{'colsample_bytree': 0.1, 'learning_rate': 0.1, 'max_bin': 63, 'max_depth': 10, 'n_estimators': 120,
+                  'num_leaves': 63, 'reg_alpha': 0, 'reg_lambda': 0, 'subsample': 0.9, 'subsample_freq': 5}]
+        # param = [{'colsample_bytree': 0.1, 'learning_rate': 0.1, 'max_bin': 63, 'max_depth': 10, 'n_estimators': 120,
+        #           'num_leaves': 63, 'reg_alpha': 0, 'reg_lambda': 0, 'subsample': 0.9, 'subsample_freq': 5,
+        #           'min_data_in_leaf': 10}]
+
         param = [{k: [v] for k, v in d.items()} for d in param]
         wrapper_preds, wrapper_preds_tra, X_wrapper_tra, X_wrapper_test, mse_score_wrapper, time_w = wrapper_based(
             X_train3, X_test3, y_train, y_test, param, grid=True)
@@ -261,6 +269,8 @@ if __name__ == '__main__':
         yy_train = all_alphas.merge(y_train, left_index=True, right_index=True).iloc[:, 0]
         X_train2 = pd.concat([X_train2, first_preds_tra], axis=1)
         X_test2 = pd.concat([X_test2, first_preds], axis=1)
+
+
         # ALPHA PREDICTION
         param = [
             {'colsample_bytree': 0.3, 'learning_rate': 0.01, 'max_bin': 63, 'max_depth': 10, 'n_estimators': 255,
@@ -306,27 +316,26 @@ if __name__ == '__main__':
     mape_ensemble_mean_expanding = mape_ensemble_mean.expanding().mean()
     mape_wrapper_mean_expanding = mape_wrapper_mean.expanding().mean()
 
-    plot_indexes = y_test.index[:]
-    plt.subplots(figsize=(12, 9))
-    plt.plot(plot_indexes, (mape_first_mean_expanding[:]), "--", color="red")
-    plt.plot(plot_indexes, (mape_all_mean_expanding[:]), "--", color="green")
-    plt.plot(plot_indexes, (mape_second_mean_expanding[:]), color="black")
-    plt.plot(plot_indexes, (mape_ensemble_mean_expanding[:]), "-.", color="blue")
-    plt.plot(plot_indexes, (mape_wrapper_mean_expanding[:]), "-.", color="purple")
 
-    plt.legend(["Embedded", "Baseline LightGBM", "Hierarchical Ensemble", "Ensemble", "Wrapper"])
-    plt.title("M4 Dataset Experiment Results")
-    plt.ylabel("Mean Square Error")
-    plt.xlabel("Data Points")
+    plot_indexes = y_test.index[5:]
+    plt.subplots(figsize=(12, 12))
+    plt.plot(plot_indexes, (mape_first_mean_expanding[5:]), "--", color="red", linewidth=2.25)
+    plt.plot(plot_indexes, (mape_all_mean_expanding[5:]), "--", color="green", linewidth=2.25)
+    plt.plot(plot_indexes, (mape_second_mean_expanding[5:]), color="black", linewidth=2.25)
+    plt.plot(plot_indexes, (mape_ensemble_mean_expanding[5:]), "-.", color="blue", linewidth=2.25)
+    plt.plot(plot_indexes, (mape_wrapper_mean_expanding[5:]), "-.", color="purple", linewidth=2.25)
+    plt.legend(["Embedded", "Baseline LightGBM", "Hierarchical Ensemble", "Ensemble", "Wrapper"], fontsize=18)
+    plt.title("M4 Dataset Experiment Results", fontsize=20)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.ylabel("Mean Square Error", fontsize=18)
+    plt.xlabel("Data Points", fontsize=18)
     plt.grid("on")
     plt.xticks(rotation=45)
-    plt.savefig("M4_Dataset_Experiment_Results.png")
+    plt.savefig("M4_Dataset_Experiment_Results.pdf", dpi=300)
     plt.show()
-    print('wrapper', time_wrapper / iter, '\n', "y_related", time_y / iter, '\n', "all", time_all / iter, '\n',
-          "ensemble",
-          time_ensemble / iter, '\n', "hierarchical", time_hierarchical / iter)
-
     plt.close()
+
     plt.plot(np.arange(len(all_alphas)), np.array(all_alphas))
     plt.plot(np.arange(len(all_alphas)), np.concatenate([alpha_preds_tr, alpha_preds], axis=0))
     plt.legend(["Ground Truth", "Alpha Prediction"])
