@@ -24,29 +24,29 @@ warnings.filterwarnings("ignore")
 np.random.seed(42)
 def alpha_calculation(y, y_hat):
     loss_Arr = []
-    # alpha_range_pos = np.linspace(0, 0.33, num=30)
-    # alpha_range_neg = np.linspace(-0.33, 0, num=30)
-    alpha_range = np.linspace(-0.33, 0.33, num=60)
-
+    alpha_range_pos = np.linspace(0, 0.33, num=30)
+    alpha_range_neg = np.linspace(-0.33, 0, num=30)
+    #alpha_range = np.linspace(-0.33, 0.33, num=60)
+    y = y.shift(1)
+    y = y.dropna(0)
     alpha_Arr = []
     for j in tqdm.tqdm(y.index):
+
         y_temp = pd.DataFrame([y["y"].loc[j]])
         y_temp.index = [str(j)]
         y_temp_hat = pd.DataFrame([y_hat["y"].loc[j]])
         y_temp_hat.index = [str(j)]
-        # if y_temp.values < y_temp_hat.values:
-        #     alpha_range = alpha_range_neg
-        #     temp_alfa = alpha_range[0]
-        # else:
-        #     alpha_range = alpha_range_pos
-        #     temp_alfa = alpha_range[0]
-        temp_alfa = alpha_range[0]
+        if y_temp.values < y_temp_hat.values:
+            alpha_range = alpha_range_neg
+            temp_alfa = alpha_range[0]
+        else:
+            alpha_range = alpha_range_pos
+            temp_alfa = alpha_range[0]
+       #temp_alfa = alpha_range[0]
         temp_loss = l2loss(y_temp, y_temp_hat, [temp_alfa])
         for i in range(len(alpha_range)):
-
             alpha = alpha_range[i + 1]
             loss = l2loss(y_temp, y_temp_hat, [alpha])
-
             if loss < temp_loss:
                 temp_loss = loss
                 temp_alfa = alpha
@@ -80,7 +80,7 @@ def train_lgb( X_t, X_te, y_t,y_te,param, grid=None):
                             cv=5, verbose=-1, refit=True)
         grid.fit(X_t, y_t)
         END = time.time()
-        #print(END - START)
+        print(END - START)
         best_parameters = grid.best_params_
         model = grid.best_estimator_
         best_score = grid.best_score_
@@ -412,55 +412,7 @@ if __name__ == "__main__":
     plt.legend(["Ground Truth", "Second Layer Prediction", "First Layer Prediction",])
     plt.show()
 
-    # plt.show()
-    # fig =  px.line()
-    # fig.add_scatter(x=y_test.index, y=y_test, mode='lines', name="Ground Truth")
-    # fig.add_scatter(x=all_preds.index, y=all_preds, mode='lines', name="All prediction")
-    # fig.add_scatter(x=all_preds.index, y=y_new_test, mode='lines', name="Second Layer Prediction")
-    # fig.add_scatter(x=first_preds.index, y=first_preds, mode='lines', name="Prediction (1st Layer)")
-    #
-    # fig.update_layout(title="ALl Features Pred, Fist layer pred, and Ground Truth", width=1800, showlegend=True)
-    # # Show plot 
-    # fig.update_traces(line={'width': 2})
-    # fig.write_html(file="All_first_and_truth.html")
-    #fig.show()
-    #
-    # trace1 = go.Scatter(
-    #     x=y_test.index,
-    #     y=y_test,
-    #     mode='lines',
-    #     name="Ground Truth"
-    # )
-    #
-    # trace2 = go.Scatter(
-    #     x=all_preds.index,
-    #     y=all_preds,
-    #     mode='lines',
-    #     name='All prediction'
-    # )
-    # trace3 = go.Scatter(
-    #     x=all_preds.index,
-    #     y=y_new_test,
-    #     mode='lines',
-    #     name="Second Layer Prediction"
-    # )
-    # trace4 = go.Scatter(
-    #     x=all_preds.index,
-    #     y=first_preds,
-    #     mode='lines',
-    #     name="Prediction (1st Layer"
-    # )
-    # # Layout setting
-    # layout = go.Layout(
-    #     title=dict(text="Automobile Dataset", x=0.5, y=0.95),
-    #     yaxis=dict(title='Mpg', showgrid=False, showline=False),  # y-axis label
-    #     paper_bgcolor='#FFFDE7',
-    #     plot_bgcolor='#FFFDE7'
-    # )
-    #
-    # data = [trace1, trace2,trace3,trace4]
-    # fig = go.Figure(data=data, layout=layout)
-    # plot(fig)
+
 
 print()
 
